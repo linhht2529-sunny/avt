@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghép Ảnh Avatar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-2xl text-center">
+        <h1 class="text-3xl font-bold mb-4 text-gray-800">Tạo Avatar Cùng Khung Ảnh Tuyệt Đẹp</h1>
+        <p class="text-gray-600 mb-6">Tải ảnh của bạn lên để ghép vào khung và tải về.</p>
+        
+        <form id="uploadForm" class="flex flex-col items-center space-y-4">
+            <div class="w-full flex justify-center">
+                <label for="imageUpload" class="cursor-pointer bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors duration-300 shadow-md">
+                    <span id="uploadText">Tải ảnh của bạn lên</span>
+                </label>
+                <input type="file" id="imageUpload" class="hidden" accept="image/*">
+            </div>
+
+            <div class="w-full relative rounded-lg overflow-hidden border-2 border-dashed border-gray-300">
+                <canvas id="photoCanvas" class="w-full h-auto"></canvas>
+                <div id="loadingIndicator" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80 hidden">
+                    <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+                </div>
+            </div>
+
+            <button id="downloadBtn" class="bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 transition-colors duration-300 shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 opacity-50 cursor-not-allowed" disabled>
+                Tải ảnh về
+            </button>
+        </form>
+
+        <div id="messageBox" class="mt-4 p-4 rounded-lg text-sm hidden"></div>
+    </div>
+
+    <script>
+        const imageUpload = document.getElementById('imageUpload');
+        const uploadText = document.getElementById('uploadText');
+        const photoCanvas = document.getElementById('photoCanvas');
+        const ctx = photoCanvas.getContext('2d');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const messageBox = document.getElementById('messageBox');
+        
+        // Bạn phải đặt file khung.png (hoặc khung.jpg) vào cùng thư mục với file này
+        const frameUrl = 'khung.png'; 
+        const frameImage = new Image();
+        frameImage.crossOrigin = "anonymous";
+        frameImage.src = frameUrl;
+
+        let frameLoaded = false;
+        let userImageLoaded = false;
+        let userImage = null;
+
+        // Tọa độ và bán kính của vùng ảnh tròn trong khung
+        const circle_x = 540; 
+        const circle_y = 540; 
+        const circle_radius = 360; 
+
+        // Tải khung ảnh trước
+        frameImage.onload = () => {
+            console.log('Khung ảnh đã tải xong.');
+            photoCanvas.width = frameImage.width;
+            photoCanvas.height = frameImage.height;
+            frameLoaded = true;
+            drawCanvas(); 
+        };
+
+        frameImage.onerror = () => {
+            console.error('Lỗi tải khung ảnh:', frameUrl);
+            showMessage('Lỗi: Không tìm thấy tệp khung ảnh. Vui lòng kiểm tra lại tên tệp và đường dẫn.', 'bg-red-100 text-red-700');
+        };
+
+        // Xử lý khi người dùng chọn ảnh
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    userImage = new Image();
+                    userImage.onload = () => {
+                        userImageLoaded = true;
+                        showLoading();
+                        setTimeout(() => {
+                            drawCanvas();
+                            downloadBtn.disabled = false;
+                            downloadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                            hideLoading();
+                            showMessage('Ảnh đã được ghép thành công! Vui lòng tải về.', 'bg-green-100 text-green-700');
+                        }, 500); 
+                    };
+                    userImage.onerror = () => {
+                        console.error('Lỗi đọc tệp ảnh người dùng.');
+                        showMessage('Lỗi: Không thể đọc tệp ảnh của bạn.', 'bg-red-100 text-red-700');
+                    };
+                    userImage.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        const drawCanvas = () => {
+            if (!frameLoaded) return;
+
+            // Xóa canvas
+            ctx.clearRect(0, 0, photoCanvas.width, photoCanvas.height);
+
+            if (userImageLoaded && userImage) {
+                // Tính toán tỷ lệ và kích thước để crop ảnh
+                const scale = Math.max((circle_radius * 2) / userImage.width, (circle_radius * 2) / userImage.height);
+                const width = userImage.width * scale;
+                const height = userImage.height * scale;
+                const x = circle_x - width / 2;
+                const y = circle_y - height / 2;
+
+                // Cắt ảnh theo hình tròn trước khi vẽ
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(circle_x, circle_y, circle_radius, 0, Math.PI * 2, true);
+                ctx.closePath();
+                ctx.clip();
+                ctx.drawImage(userImage, x, y, width, height);
+                ctx.restore();
+            }
+
+            // Vẽ khung ảnh lên trên cùng
+            ctx.drawImage(frameImage, 0, 0, photoCanvas.width, photoCanvas.height);
+        };
+
+        downloadBtn.addEventListener('click', () => {
+            const dataURL = photoCanvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = 'avatar-chao-mung.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        });
+
+        const showLoading = () => {
+            loadingIndicator.classList.remove('hidden');
+            uploadText.textContent = 'Đang ghép ảnh...';
+        };
+
+        const hideLoading = () => {
+            loadingIndicator.classList.add('hidden');
+            uploadText.textContent = 'Tải ảnh của bạn lên';
+        };
+
+        const showMessage = (text, classes) => {
+            messageBox.textContent = text;
+            messageBox.className = `mt-4 p-4 rounded-lg text-sm ${classes}`;
+            messageBox.classList.remove('hidden');
+        };
+    </script>
+</body>
+</html>
